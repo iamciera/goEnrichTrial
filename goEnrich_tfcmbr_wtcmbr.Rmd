@@ -26,6 +26,7 @@ summary(d)
 head(d, n=1)
 names(d)
 names(d)[1] <- "ITAG"
+d$ITAG <- as.character(d$ITAG) #just in case...sometime factors act wierd in matching statments
 head(d$ITAG)
 ```
 
@@ -36,27 +37,41 @@ use Biostrings to calculate this
 #source("http://bioconductor.org/biocLite.R")
 #biocLite("Biostrings")
 library(Biostrings)
-library(seqinr) 
 ``` 
 
 This is a fasta file of the reference used. Biostrings read.DNAStringSet didn't work to read the fasta file, so I installed and used seqinr.
 
+*JM: The error from read.DNAStringSet seemed clear to me...the function was depricated and you needed to use readDNAStringSet instead.  BioString is **much** faster than seqinR*
+
 ```{r, results = 'hide'}
 #itagSeqs <- read.fasta(file = system.file("ITAG2.4_cds.fasta", package = "seqinr"))
 #itagSeqs <- read.FASTA(ITAG2.4_cds.fasta, "FASTA")
-#itagSeqs <- read.DNAStringSet("ITAG2.4_cds.fasta")
+#itagSeqs <- readDNAStringSet("ITAG2.4_cds.fasta")
+```
+
+Alternate with DNA string set
+```{r}
+itagSeqs <- readDNAStringSet(file = "ITAG2.4_cds.fasta") 
+itagLength <- nchar(itagSeqs) #length of each ITAG
+names(itagLength) <- names(itagSeqs)
 ```
 
 Reading in fasta file takes a few min. So does getting the length of ITAGs
-```{r}
+```{r, eval=FALSE}
 itagSeqs <- read.fasta(file = "ITAG2.4_cds.fasta") 
 itagLength <- nchar(itagSeqs) #length of each ITAG
 ```
 
 Fix names from fasta file to match those in the expression file.
 Do I need this step? Doesn't look like I do.
+*Generally I like trimming off the version and transcript number, but it looks like you don't need to*
+*If you use BioStringSet you do need to do some trimming*
 
 ```{r}
+head(names(itagLength))
+names(itagLength) <- substr(names(itagLength),1,18) # not needed if you use seqinR
+head(d$ITAG)
+d$ITAG[!d$ITAG %in% names(itagLength)] #Looks OK
 #names(itagLength) <- matrix(unlist(strsplit(names(itagSeqs),split="|",fixed=T)),ncol=3,byrow=T)[,1]
 ```
 
@@ -69,15 +84,17 @@ Create GO term list in format needed for goseq.
 This file is on smart site at Maloof/Sinha Tomato Group Resources / Data / GOannotation
 
 ```{r}
-GOinterpro_annex_merge <- read.delim("0728fas.blast.map.annot.interpro.annex.GOstatMerge.txt",row.names=NULL)
+GOinterpro_annex_merge <- read.delim("0728fas.blast.map.annot.interpro.annex.GOstatMerge.txt",row.names=NULL,as.is=T)
 head(GOinterpro_annex_merge)
+summary(GOinterpro_annex_merge)
 ```
 
 This file is on smart site at Maloof/Sinha Tomato Group Resources / Data / GOannotation 
 
 ```{r}
-GOinterpro_annex_slim <-  read.delim("0728fas.blast.map.annot.interpro.annex.plant_slim.GOstat.txt",row.names=NULL)
+GOinterpro_annex_slim <-  read.delim("0728fas.blast.map.annot.interpro.annex.plant_slim.GOstat.txt",row.names=NULL,as.is=T)
 head(GOinterpro_annex_slim)
+summary(GOinterpro_annex_slim)
 ```
 
 Check to see if ITAG names are a problem. 
@@ -102,10 +119,11 @@ Wrapper function to actually do the GO evalutation. Change the default arguments
 colnames(d)
 ```
 
+*I don't understand why ilengths is set to alignment length rather than the ITAG length?*
 ```{r}
 eval.go <- function(gene.names=d$ITAG, FC=d$logFC, pval=d$PValue,
         FC.thresh=0,p.thresh=.05,go.terms=NULL,
-        ilength=d$alignment.length,verbose=TRUE,
+        ilength=itagLength,verbose=TRUE,
 				go.cutoff=.1, keep.GO="BP",type="GO") {
   
   #add GO: header if needed
@@ -180,8 +198,11 @@ eval.go <- function(gene.names=d$ITAG, FC=d$logFC, pval=d$PValue,
 	list(up=up.go,down=down.go)
 	
 	}
+```
 
-
+Run the GO
+*you might want to change the filtering below*
+```{r}
 GO.sets <- ls(pattern="GO[[:alnum:]]")
 
 #for each GO set loaded, look for enriched terms
@@ -194,9 +215,11 @@ for (g in GO.sets) {
     print(tmp$down[tmp$down$upval.adjust<.1,c(4,6)])
     print("################################")
   }
-       
+```
 
-
+Write output
+*something has changes in the tables so the merging function below isn't working*
+```{r}
 #write results to file
 #path for output.
 path <- "./"
