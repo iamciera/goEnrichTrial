@@ -1,0 +1,230 @@
+GO term analysis 
+----------------
+
+tf2cmbr_wtcmbr
+=============
+
+```{r}
+#Install
+#source("http://bioconductor.org/biocLite.R")
+#biocLite("goseq")
+#biocLite("GO.db")
+library(goseq)
+library(GO.db)
+```
+
+There were some problems on reading in the data files.  I converted the files to .csv first. That should help with merging down the line. 
+
+This has the DE calls for all detected genes. 
+
+```{r, results ='hide'}
+d <- read.csv("tf2cmbr_wtcmbr_DE1_full.csv") 
+head(d)
+```
+```{r, results='hide'}
+summary(d)
+head(d, n=1)
+names(d)
+names(d)[1] <- "ITAG"
+head(d$ITAG)
+```
+
+Need length of each ITAG, becuase goseq adjusts for this
+use Biostrings to calculate this
+```{r}
+#Install
+#source("http://bioconductor.org/biocLite.R")
+#biocLite("Biostrings")
+library(Biostrings)
+library(seqinr) 
+``` 
+
+This is a fasta file of the reference used. Biostrings read.DNAStringSet didn't work to read the fasta file, so I installed and used seqinr.
+
+```{r, results = 'hide'}
+#itagSeqs <- read.fasta(file = system.file("ITAG2.4_cds.fasta", package = "seqinr"))
+#itagSeqs <- read.FASTA(ITAG2.4_cds.fasta, "FASTA")
+#itagSeqs <- read.DNAStringSet("ITAG2.4_cds.fasta")
+```
+
+Reading in fasta file takes a few min. So does getting the length of ITAGs
+```{r}
+itagSeqs <- read.fasta(file = "ITAG2.4_cds.fasta") 
+itagLength <- nchar(itagSeqs) #length of each ITAG
+```
+
+Fix names from fasta file to match those in the expression file.
+Do I need this step? Doesn't look like I do.
+```{r}
+#names(itagLength) <- matrix(unlist(strsplit(names(itagSeqs),split="|",fixed=T)),ncol=3,byrow=T)[,1]
+```
+
+Checking to see itagLength column content. I need to melt this so I can use it in Susan's file
+```{r, results = 'hide'}
+head(itagLength, n=30)
+```
+
+Create GO term list in format needed for goseq
+This file is on smart site at Maloof/Sinha Tomato Group Resources / Data / GOannotation
+```{r}
+GOinterpro_annex_merge <- read.delim("../0728fas.blast.map.annot.interpro.annex.GOstatMerge.txt",row.names=NULL)
+head(GOinterpro_annex_merge)
+```
+
+This file is on smart site at Maloof/Sinha Tomato Group Resources / Data / GOannotation 
+Need to more to Github!!!
+```{r}
+GOinterpro_annex_slim <-  read.delim("../0728fas.blast.map.annot.interpro.annex.plant_slim.GOstat.txt",row.names=NULL)
+head(GOinterpro_annex_slim)
+```
+
+Check to see if ITAG names are a problem. 
+```{r}
+sum(GOinterpro_annex_merge$ITAG %in% d$ITAG) #12706
+```
+
+```{r, results = 'hide'}
+head(GOinterpro_annex_merge$ITAG)
+head(d$ITAG)
+```
+
+The number from the next command should match the number from the previous command.
+
+```{r}
+sum(substr(GOinterpro_annex_merge$ITAG,1,14) %in% substr(d$ITAG,1,14)) #12706, good.
+```
+
+Wrapper function to actually do the GO evalutation. Change the default arguments to match your file.  FC = fold change info. pval = adjusted DE pvalues.  Check you d file to make sure the names match. 
+
+```{r}
+colnames(d)
+```
+
+```{r}
+eval.go <- function(gene.names=d$ITAG, FC=d$logFC, pval=d$PValue,
+        FC.thresh=0,p.thresh=.05,go.terms=NULL,
+        ilength=d$alignment.length,verbose=TRUE,
+				go.cutoff=.1, keep.GO="BP",type="GO") {
+  
+  #add GO: header if needed
+  
+  head(go.terms)
+  if (type=="GO" & length(grep("GO",go.terms$GO[1]))==0) {
+    go.terms$GO <- gsub("([0-9]{7})","GO:\\1",go.terms$GO)
+  }
+  
+  #remove extra spaces
+  go.terms$GO <- gsub(" +","",go.terms$GO)
+  
+  #get length list to match gene names
+  ilength <- ilength[names(ilength) %in% gene.names]
+
+  #filter go terms to match gene list
+  go.terms <- go.terms[go.terms$ITAG %in% gene.names,]
+  #head(go.terms)
+  
+  #convert go terms to list
+  go.list <- strsplit(as.character(go.terms$GO),split=",")
+  head(go.list)
+  names(go.list) <- go.terms$ITAG
+	
+	#filter genes based on criterion
+	up <- as.integer(FC > FC.thresh & pval < p.thresh) #upregulated genes
+	names(up) <- gene.names
+	down <- as.integer(FC < - FC.thresh & pval < p.thresh) #downregulated genes
+	names(down) <- gene.names
+	
+	if (verbose) {
+		print(summary(up))
+		print(summary(down))
+		}
+	
+	#calculate bias function
+	up.pwf <- nullp(up,bias.data=ilength,plot.fit=F)
+	down.pwf <- nullp(down,bias.data=ilength,plot.fit=F)
+	
+	#calculate p-values for over-representation
+	up.go <- goseq(up.pwf,gene2cat=go.list)
+	down.go <- goseq(down.pwf,gene2cat=go.list)
+	
+	if (type=="GO") {#add GO term description
+		up.go$description <- Term(up.go$category)
+		up.go$ontology <- Ontology(up.go$category)
+		down.go$description <- Term(down.go$category)
+		down.go$ontology <- Ontology(down.go$category)
+	
+		#filter for GO categories of interest
+		up.go <- up.go[up.go$ontology==keep.GO,]
+		down.go <- down.go[down.go$ontology==keep.GO,]
+	
+		#remove NAs
+		up.go <- up.go[!is.na(up.go$ontology),]
+		down.go <- down.go[!is.na(down.go$ontology),]
+	}	
+	
+	if (type=="mapman") {#add mapman description
+		up.go <- merge(up.go,bincodes,by.x="category",by.y="BINCODE",sort=F)
+		down.go <- merge(down.go,bincodes,by.x="category",by.y="BINCODE",sort=F)
+		}
+		
+	#adjust for multiple testing
+	up.go$upval.adjust <- p.adjust(up.go$over,"fdr")
+	down.go$upval.adjust <- p.adjust(down.go$over,"fdr")
+		
+	#truncate to go.cutoff threshold
+	up.go <- up.go[up.go$upval<go.cutoff,]
+	down.go <- down.go[down.go$upval<go.cutoff,]
+	
+	list(up=up.go,down=down.go)
+	
+	}
+
+
+GO.sets <- ls(pattern="GO[[:alnum:]]")
+
+#for each GO set loaded, look for enriched terms
+for (g in GO.sets) {
+    print(g)
+    tmp <- eval.go(go.terms=get(g),p.thresh=0.05)
+    print("up")
+    print(tmp$up[tmp$up$upval.adjust<.1,c(4,6)])
+    print("down")
+    print(tmp$down[tmp$down$upval.adjust<.1,c(4,6)])
+    print("################################")
+  }
+       
+
+
+#write results to file
+#path for output.
+path <- "./"
+
+FDR <- c(0.01,0.05,.1) #The FDR cutoffs to test for GO enrichment
+
+for (g in GO.sets) {
+results.up <- NULL
+results.down <- NULL
+  for (f in FDR) {
+    tmp <- eval.go(go.terms=get(g),p.thresh=f)
+    tmp.up <- tmp$up[c(1,4,5,6)]
+    tmp.down <- tmp$down[c(1,4,5,6)]
+    names(tmp.up)[4] <- paste("pval.adj.FDR",f,sep="")
+    names(tmp.down)[4] <- paste("pval.adj.FDR",f,sep="")
+    if (is.null(results.up)) {
+      results.up <- tmp.up
+    } else {
+      results.up <- merge(results.up,tmp.up,all=T,by = c("category","description","ontology"))
+    }
+    if (is.null(results.down)) {
+      results.down <- tmp.down
+    } else {
+      results.down <- merge(results.down,tmp.down,all=T,by = c("category","description","ontology"))
+    }
+  } #for f
+  results.up <- results.up[order(results.up[,length(results.up)]),] #sort by last column of results
+  results.down <- results.down[order(results.down[,length(results.down)]),] #sort by last column of results
+  write.table(results.up,paste(path,g,"TranscriptomeSPE_UP_GO.tsv",sep=""),sep="\t",row.names=F)
+  write.table(results.down,paste(path,g,"TranscriptromeSPE_DOWN_GO.tsv",sep=""),sep="\t",row.names=F)
+} # for g
+``` 
+
