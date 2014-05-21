@@ -218,6 +218,7 @@ for (g in GO.sets) {
 ```
 
 Write output
+*something has changes in the tables so the merging function below isn't working*
 ```{r}
 #write results to file
 #path for output.
