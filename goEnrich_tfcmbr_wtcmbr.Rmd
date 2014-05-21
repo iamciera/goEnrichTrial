@@ -26,7 +26,7 @@ summary(d)
 head(d, n=1)
 names(d)
 names(d)[1] <- "ITAG"
-d$ITAG <- as.character(d$ITAG) # factors can mess you up below
+d$ITAG <- as.character(d$ITAG) #just in case...sometime factors act wierd in matching statments
 head(d$ITAG)
 ```
 
@@ -65,9 +65,11 @@ itagLength <- nchar(itagSeqs) #length of each ITAG
 Fix names from fasta file to match those in the expression file.
 Do I need this step? Doesn't look like I do.
 *Generally I like trimming off the version and transcript number, but it looks like you don't need to*
+*If you use BioStringSet you do need to do some trimming*
 
 ```{r}
 head(names(itagLength))
+names(itagLength) <- substr(names(itagLength),1,18) # not needed if you use seqinR
 head(d$ITAG)
 d$ITAG[!d$ITAG %in% names(itagLength)] #Looks OK
 #names(itagLength) <- matrix(unlist(strsplit(names(itagSeqs),split="|",fixed=T)),ncol=3,byrow=T)[,1]
