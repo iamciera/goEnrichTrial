@@ -55,26 +55,28 @@ itagLength <- nchar(itagSeqs) #length of each ITAG
 
 Fix names from fasta file to match those in the expression file.
 Do I need this step? Doesn't look like I do.
+
 ```{r}
 #names(itagLength) <- matrix(unlist(strsplit(names(itagSeqs),split="|",fixed=T)),ncol=3,byrow=T)[,1]
 ```
 
-Checking to see itagLength column content. I need to melt this so I can use it in Susan's file
+Checking to see itagLength column content. (I need to melt this if I want to use in Susan's or Aasishes other script.)
 ```{r, results = 'hide'}
 head(itagLength, n=30)
 ```
 
-Create GO term list in format needed for goseq
+Create GO term list in format needed for goseq.
 This file is on smart site at Maloof/Sinha Tomato Group Resources / Data / GOannotation
+
 ```{r}
-GOinterpro_annex_merge <- read.delim("../0728fas.blast.map.annot.interpro.annex.GOstatMerge.txt",row.names=NULL)
+GOinterpro_annex_merge <- read.delim("0728fas.blast.map.annot.interpro.annex.GOstatMerge.txt",row.names=NULL)
 head(GOinterpro_annex_merge)
 ```
 
 This file is on smart site at Maloof/Sinha Tomato Group Resources / Data / GOannotation 
-Need to more to Github!!!
+
 ```{r}
-GOinterpro_annex_slim <-  read.delim("../0728fas.blast.map.annot.interpro.annex.plant_slim.GOstat.txt",row.names=NULL)
+GOinterpro_annex_slim <-  read.delim("0728fas.blast.map.annot.interpro.annex.plant_slim.GOstat.txt",row.names=NULL)
 head(GOinterpro_annex_slim)
 ```
 
