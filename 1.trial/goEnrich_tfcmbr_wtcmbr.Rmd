@@ -253,3 +253,4 @@ results.down <- NULL
 } # for g
 ``` 
 
+head(results.up)
